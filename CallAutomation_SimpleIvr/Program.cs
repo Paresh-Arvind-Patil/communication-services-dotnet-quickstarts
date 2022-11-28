@@ -67,23 +67,8 @@ app.MapPost("/api/calls/{contextId}", async (
         {
             // Start call recording
             var serverCallId = client.GetCallConnection(@event.CallConnectionId).GetCallConnectionProperties().Value.ServerCallId;
-            StartRecordingOptions startRecordingOptions = new StartRecordingOptions(new ServerCallLocator(serverCallId));
+            StartRecordingOptions startRecordingOptions = new StartRecordingOptions(new ServerCallLocator(serverCallId)) { RecordingStateCallbackEndpoint = new Uri(callbackUriBase + $"/api/calls/{contextId}?callerId={callerId}")};
             _ = Task.Run(async () => await client.GetCallRecording().StartRecordingAsync(startRecordingOptions));
-
-
-            // Start recognize prompt - play audio and recognize 1-digit DTMF input
-            var recognizeOptions =
-                new CallMediaRecognizeDtmfOptions(CommunicationIdentifier.FromRawId(callerId), maxTonesToCollect: 1)
-                {
-                    InterruptPrompt = true,
-                    InterToneTimeout = TimeSpan.FromSeconds(10),
-                    InitialSilenceTimeout = TimeSpan.FromSeconds(5),
-                    Prompt = new FileSource(new Uri(audioBaseUrl + builder.Configuration["MainMenuAudio"])),
-                    OperationContext = "MainMenu"
-                };
-            await client.GetCallConnection(@event.CallConnectionId)
-                .GetCallMedia()
-                .StartRecognizingAsync(recognizeOptions);
         }
         if (@event is RecognizeCompleted { OperationContext: "MainMenu" })
         {
@@ -132,7 +117,6 @@ app.MapPost("/api/calls/{contextId}", async (
         }
         if (@event is RecognizeFailed { OperationContext: "MainMenu" })
         {
-
             // play invalid audio
             await client.GetCallConnection(@event.CallConnectionId).GetCallMedia().PlayToAllAsync(new FileSource(new Uri(audioBaseUrl + builder.Configuration["InvalidAudio"])), new PlayOptions() { Loop = false });
             await client.GetCallConnection(@event.CallConnectionId).HangUpAsync(true);
@@ -144,6 +128,26 @@ app.MapPost("/api/calls/{contextId}", async (
         if (@event is PlayFailed { OperationContext: "SimpleIVR" })
         {
             await client.GetCallConnection(@event.CallConnectionId).HangUpAsync(true);
+        }
+        if (@event is RecordingStateChanged)
+        {
+            var recEvent = (RecordingStateChanged)@event;
+            logger.LogInformation($"Recording state changed event recieved: {JsonConvert.SerializeObject(recEvent)}");
+            if(recEvent.State.Equals(RecordingState.Active))
+            {
+                var recognizeOptions =
+                new CallMediaRecognizeDtmfOptions(CommunicationIdentifier.FromRawId(callerId), maxTonesToCollect: 1)
+                {
+                    InterruptPrompt = true,
+                    InterToneTimeout = TimeSpan.FromSeconds(10),
+                    InitialSilenceTimeout = TimeSpan.FromSeconds(5),
+                    Prompt = new FileSource(new Uri(audioBaseUrl + builder.Configuration["MainMenuAudio"])),
+                    OperationContext = "MainMenu"
+                };
+                await client.GetCallConnection(@event.CallConnectionId)
+                    .GetCallMedia()
+                    .StartRecognizingAsync(recognizeOptions);
+            }
         }
     }
     return Results.Ok();

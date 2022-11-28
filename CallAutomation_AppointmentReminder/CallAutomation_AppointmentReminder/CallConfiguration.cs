@@ -23,6 +23,8 @@ namespace CallAutomation_AppointmentReminder
         /// </summary>
         public string TargetPhoneNumber { get; set; }
 
+        public string TargetAcsUser { get; set; }
+
         /// <summary>
         /// The phone number associated with the source. 
         /// </summary>
@@ -44,21 +46,6 @@ namespace CallAutomation_AppointmentReminder
         public string CallbackEventUri => $"{AppBaseUri}" + EventCallBackRoute;
 
         /// <summary>
-        /// Appointment reminder menu audio file route
-        /// </summary>
-        public string AppointmentReminderMenuAudio { get; set; }
-
-        /// <summary>
-        /// Appointment confirmed audio file route
-        /// </summary>
-        public string AppointmentConfirmedAudio { get; set; }
-
-        /// <summary>
-        /// Appointment cancelled audio file route
-        /// </summary>
-        public string AppointmentCancelledAudio { get; set; }
-
-        /// <summary>
         /// Invalid input audio file route
         /// </summary>
         public string InvalidInputAudio { get; set; }
@@ -67,5 +54,19 @@ namespace CallAutomation_AppointmentReminder
         /// Time out audio file route
         /// </summary>
         public string TimedoutAudio { get; set; }
+
+        public string AppointmentChoiceMenu { get; set; }
+
+        public string MakeAppointmentAudio { get; set; }
+
+        public string AppointmentStatusAudio { get; set; }
+
+        public string CancelAppointmentAudio { get; set; }
+        public string ConfirmedAppointmentAudio { get; set; }
+
+        public string CustomerSupportAudio { get; set; }
+
+        public string SpeechOptionNotMatchedAudio { get; set; }
+
     }
 }

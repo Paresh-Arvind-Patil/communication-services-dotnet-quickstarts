@@ -1,28 +1,70 @@
-﻿using Azure.Communication.CallAutomation;
+﻿using Azure.Communication;
+using Azure.Communication.CallAutomation;
 using Microsoft.Extensions.Options;
 
 namespace CallAutomation_AppointmentReminder
 {
     public static class Utils
     {
-       public static PlaySource GetAudioForTone(DtmfTone toneDetected, IOptions<CallConfiguration> callConfiguration)
+        public static async Task<Azure.Response> RecognizeDtmfOrPlayForLabelAsync(CallMedia callconnectionMedia, CallConfiguration callConfiguration, string label)
+        { 
+            if (string.Equals(label, "MakeAppointment", StringComparison.OrdinalIgnoreCase))
+            {
+                // DTMF for entering phone number to reserve appointment followed by #
+                return await RecognizeDtmfAsync(callconnectionMedia, label, callConfiguration);
+            }
+            if (string.Equals(label, "CancelAppointment", StringComparison.OrdinalIgnoreCase))
+            {
+                // DTMF for entering 10 digit appointment number followed by #
+                return await RecognizeDtmfAsync(callconnectionMedia, label, callConfiguration);
+            }
+            if (string.Equals(label, "CustomerSupport", StringComparison.OrdinalIgnoreCase))
+            {
+                // Play audio (Using TTS): You have reached customer support, Thank you!
+                return await PlayAudioAsync(callconnectionMedia, label, callConfiguration);
+            }
+
+            throw new Exception("Invalid or no label detected!!");
+        }
+
+        private static async Task<Azure.Response> RecognizeDtmfAsync(CallMedia callconnectionMedia, string label, CallConfiguration callConfiguration)
+        {
+            var recognizeOptions =
+                new CallMediaRecognizeDtmfOptions(CommunicationIdentifier.FromRawId(callConfiguration.TargetPhoneNumber), maxTonesToCollect: 10)
+                {
+                    InterruptPrompt = true,
+                    InitialSilenceTimeout = TimeSpan.FromSeconds(5),
+                    Prompt = GetAudioForlabel(label, callConfiguration),
+                    OperationContext = label,
+                    StopTones = new List<DtmfTone> { DtmfTone.Pound }
+                };
+
+            return await callconnectionMedia.StartRecognizingAsync(recognizeOptions);
+        }
+
+        private static async Task<Azure.Response> PlayAudioAsync(CallMedia callconnectionMedia, string label, CallConfiguration callConfiguration)
+        {
+            return await callconnectionMedia.PlayToAllAsync(GetAudioForlabel(label, callConfiguration), new PlayOptions { OperationContext = label, Loop = false });
+        }
+
+        private static PlaySource GetAudioForlabel(string label, CallConfiguration callConfiguration)
         {
             FileSource playSource;
 
-            if (toneDetected.Equals(DtmfTone.One))
+            if (string.Equals(label, "MakeAppointment", StringComparison.OrdinalIgnoreCase))
             {
-                playSource = new FileSource(new Uri(callConfiguration.Value.AppBaseUri + callConfiguration.Value.AppointmentConfirmedAudio));
+                    return new FileSource(new Uri(callConfiguration.AppBaseUri + callConfiguration.MakeAppointmentAudio));
             }
-            else if (toneDetected.Equals(DtmfTone.Two))
+            if (string.Equals(label, "CancelAppointment", StringComparison.OrdinalIgnoreCase))
             {
-                playSource = new FileSource(new Uri(callConfiguration.Value.AppBaseUri + callConfiguration.Value.AppointmentCancelledAudio));
+                return new FileSource(new Uri(callConfiguration.AppBaseUri + callConfiguration.CancelAppointmentAudio));
             }
-            else // Invalid Dtmf tone
+            if (string.Equals(label, "CustomerSupport", StringComparison.OrdinalIgnoreCase))
             {
-                playSource = new FileSource(new Uri(callConfiguration.Value.AppBaseUri + callConfiguration.Value.InvalidInputAudio));
+                return new FileSource(new Uri(callConfiguration.AppBaseUri + callConfiguration.CustomerSupportAudio));
             }
 
-            return playSource;
+            throw new Exception($"Invalid label detected!!");
         }
     }
 }
