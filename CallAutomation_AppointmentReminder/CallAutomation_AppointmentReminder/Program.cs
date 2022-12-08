@@ -80,11 +80,11 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
                 },
                 new RecognizeChoice("CancelAppointment", new List<string> { "Two", "Second", "Cancel appointment", "Cancel" })
                 {
-                    Tone = DtmfTone.Three
+                    Tone = DtmfTone.Two
                 },
                 new RecognizeChoice("CustomerSupport", new List<string> { "Three", "Third", "Customer Support", "Support", "Help" })
                 {
-                    Tone = DtmfTone.Four
+                    Tone = DtmfTone.Three
                 },
             };
 
@@ -131,7 +131,7 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
                 {
                     SourceLocale = "en-US",
                     VoiceGender = GenderType.Female,
-                    VoiceName = "en-GB-OliviaNeural"
+                    VoiceName = "en-US-MichelleNeural"
                 };
 
                 //var playSource = new FileSource(new Uri(callConfiguration.Value.AppBaseUri + callConfiguration.Value.TimedoutAudio));
@@ -149,7 +149,7 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
                 {
                     SourceLocale = "en-US",
                     VoiceGender = GenderType.Female,
-                    VoiceName = "en-GB-OliviaNeural"
+                    VoiceName = "en-US-MichelleNeural"
                 };
 
                 //Play audio for time out
@@ -167,7 +167,7 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
             {
                 SourceLocale = "en-US",
                 VoiceGender = GenderType.Female,
-                VoiceName = "en-GB-OliviaNeural"
+                VoiceName = "en-US-MichelleNeural"
             };
 
             //Play audio for time out
@@ -189,7 +189,7 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
                 {
                     SourceLocale = "en-US",
                     VoiceGender = GenderType.Female,
-                    VoiceName = "en-GB-OliviaNeural"
+                    VoiceName = "en-US-MichelleNeural"
                 };
 
                 //Play audio for time out
@@ -205,7 +205,7 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
             {
                 SourceLocale = "en-US",
                 VoiceGender = GenderType.Female,
-                VoiceName = "en-GB-OliviaNeural"
+                VoiceName = "en-US-MichelleNeural"
             };
 
             // Check for time out, and then play audio message
@@ -228,7 +228,7 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
                 {
                     SourceLocale = "en-US",
                     VoiceGender = GenderType.Female,
-                    VoiceName = "en-GB-OliviaNeural"
+                    VoiceName = "en-US-MichelleNeural"
                 };
                 //Play audio for time out
                 await callConnectionMedia.PlayToAllAsync(playSource, new PlayOptions { OperationContext = "PlayAudioCompletedEndCall", Loop = false });
