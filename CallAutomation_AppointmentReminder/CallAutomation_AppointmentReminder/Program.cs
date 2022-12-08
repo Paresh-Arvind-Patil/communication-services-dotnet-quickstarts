@@ -5,6 +5,7 @@ using Azure.Messaging;
 using CallAutomation_AppointmentReminder;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
+using Newtonsoft.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
@@ -13,7 +14,7 @@ builder.Services.AddSwaggerGen();
 //Fetch configuration and add call automation as singleton service
 var callConfigurationSection = builder.Configuration.GetSection(nameof(CallConfiguration));
 builder.Services.Configure<CallConfiguration>(callConfigurationSection);
-builder.Services.AddSingleton(new CallAutomationClient(pmaEndpoint: new Uri("<pma-base-url>"), callConfigurationSection["ConnectionString"]));
+builder.Services.AddSingleton(new CallAutomationClient(pmaEndpoint: new Uri("https://x-pma-euno-01.plat.skype.com:6448/"), callConfigurationSection["ConnectionString"]));
 var app = builder.Build();
 
 var sourceIdentity = await app.ProvisionAzureCommunicationServicesIdentity(callConfigurationSection["ConnectionString"]);
@@ -62,6 +63,7 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
         CallAutomationEventBase @event = CallAutomationEventParser.Parse(cloudEvent);
         var callConnection = callAutomationClient.GetCallConnection(@event.CallConnectionId);
         var callConnectionMedia = callConnection.GetCallMedia();
+        logger.LogInformation($"***** CallAutomationEvent Received ***** \n {JsonConvert.SerializeObject(@event)}");
 
         if (@event is CallConnected)
         {
@@ -102,14 +104,13 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
             logger.LogInformation($"RecognizeCompleted (AppointmentChoiceMenu) event received for call connection id: {@event.CallConnectionId}");
             var recognizeCompletedEvent = (RecognizeCompleted)@event;
 
-            //Do i need CallMediaRecognitionType since I already know from the OperationContext that its Choice and not DTMF ?
             if (CallMediaRecognitionType.Choices.Equals(recognizeCompletedEvent.RecognitionType))
             {
                 //Fetch Label - Identifier of the choice           
                 var label = recognizeCompletedEvent.ChoiceResult.Label;
                 // recognizedPhrase - Is null if choice is detected using Dtmf tone
                 var recognizedPhrase = recognizeCompletedEvent.ChoiceResult?.RecognizedPhrase;
-                Console.WriteLine($"Lable Recognized: {label}, and Phrased Recognized: {recognizedPhrase}");
+                logger.LogInformation($"Lable Recognized: {label}, and Phrased Recognized: {recognizedPhrase}");
                 await Utils.RecognizeDtmfOrPlayForLabelAsync(callConnectionMedia, callConfiguration.Value, label).ConfigureAwait(false);
             }
         }
@@ -123,7 +124,7 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
             {
                 logger.LogInformation($"Recognition timed out for call connection id: {@event.CallConnectionId}");
                 
-                var playSource = new TextSource("Recognition failed for appointment choice, due to timeout, Disconnecting the call. Thank you for using play text to speech!")
+                var playSource = new TextSource("Recognition failed for appointment choice, due to timeout, Disconnecting the call. Thank you!")
                 {
                     SourceLocale = "en-US",
                     VoiceGender = GenderType.Female,
@@ -141,7 +142,7 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
                 logger.LogInformation($"Recognition speech option did not match for call connection id: {@event.CallConnectionId}");
                 //var playSource = new FileSource(new Uri(callConfiguration.Value.AppBaseUri + callConfiguration.Value.SpeechOptionNotMatchedAudio));
 
-                var playSource = new TextSource("Recognition failed for appointment choice, as speech option did not matched, Disconnecting the call. Thank you for using play text to speech!")
+                var playSource = new TextSource("Recognition failed for appointment choice, as speech option did not matched, Disconnecting the call. Thank you!")
                 {
                     SourceLocale = "en-US",
                     VoiceGender = GenderType.Female,
@@ -159,7 +160,7 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
 
             // Check for time out, and then play audio message
 
-            var playSource = new TextSource("Your appointment has been confirmed, Disconnecting the call. Thank you for using play text to speech!")
+            var playSource = new TextSource("Your appointment has been confirmed, Disconnecting the call. Thank you!")
             {
                 SourceLocale = "en-US",
                 VoiceGender = GenderType.Female,
@@ -181,7 +182,7 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
                 logger.LogInformation($"Recognition timed out for call connection id: {@event.CallConnectionId}");
                 //var playSource = new FileSource(new Uri(callConfiguration.Value.AppBaseUri + callConfiguration.Value.TimedoutAudio));
 
-                var playSource = new TextSource("Recognition failed to make appointment, due to timeout, Disconnecting the call. Thank you for using play text to speech!")
+                var playSource = new TextSource("Recognition failed to make appointment, due to timeout, Disconnecting the call. Thank you!")
                 {
                     SourceLocale = "en-US",
                     VoiceGender = GenderType.Female,
@@ -197,7 +198,7 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
             logger.LogInformation($"RecognizeCompleted (CancelAppointment) event received for call connection id: {@event.CallConnectionId}");
             var recognizeCompletedEvent = (RecognizeCompleted)@event;
 
-            var playSource = new TextSource("Your appointment has been cancelled, Disconnecting the call. Thank you for using play text to speech!")
+            var playSource = new TextSource("Your appointment has been cancelled, Disconnecting the call. Thank you!")
             {
                 SourceLocale = "en-US",
                 VoiceGender = GenderType.Female,
@@ -220,7 +221,7 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
             {
                 logger.LogInformation($"Recognition timed out (CancelAppointment) for call connection id: {@event.CallConnectionId}");
                 //var playSource = new FileSource(new Uri(callConfiguration.Value.AppBaseUri + callConfiguration.Value.TimedoutAudio));
-                var playSource = new TextSource("Recognition failed to cancel appointment, due to timeout, Disconnecting the call. Thank you for using play text to speech!")
+                var playSource = new TextSource("Recognition failed to cancel appointment, due to timeout, Disconnecting the call. Thank you!")
                 {
                     SourceLocale = "en-US",
                     VoiceGender = GenderType.Female,
