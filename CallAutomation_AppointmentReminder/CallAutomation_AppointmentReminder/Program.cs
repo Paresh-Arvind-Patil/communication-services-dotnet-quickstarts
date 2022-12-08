@@ -13,9 +13,7 @@ builder.Services.AddSwaggerGen();
 //Fetch configuration and add call automation as singleton service
 var callConfigurationSection = builder.Configuration.GetSection(nameof(CallConfiguration));
 builder.Services.Configure<CallConfiguration>(callConfigurationSection);
-builder.Services.AddSingleton(new CallAutomationClient(pmaEndpoint: new Uri("https://x-pma-euno-01.plat.skype.com:6448/"), callConfigurationSection["ConnectionString"]));
-//https://x-pma-euno-01.plat.skype.com:6448/
-//https://pma-dev-papati.plat-dev.skype.net:6448/
+builder.Services.AddSingleton(new CallAutomationClient(pmaEndpoint: new Uri("<pma-base-url>"), callConfigurationSection["ConnectionString"]));
 var app = builder.Build();
 
 var sourceIdentity = await app.ProvisionAzureCommunicationServicesIdentity(callConfigurationSection["ConnectionString"]);
@@ -61,8 +59,6 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
 {
     foreach (var cloudEvent in cloudEvents)
     {
-        //logger.LogInformation($"Event received: {JsonConvert.SerializeObject(cloudEvent)}");
-
         CallAutomationEventBase @event = CallAutomationEventParser.Parse(cloudEvent);
         var callConnection = callAutomationClient.GetCallConnection(@event.CallConnectionId);
         var callConnectionMedia = callConnection.GetCallMedia();

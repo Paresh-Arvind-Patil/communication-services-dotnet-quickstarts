@@ -23,8 +23,6 @@ namespace CallAutomation_AppointmentReminder
         /// </summary>
         public string TargetPhoneNumber { get; set; }
 
-        public string TargetAcsUser { get; set; }
-
         /// <summary>
         /// The phone number associated with the source. 
         /// </summary>
