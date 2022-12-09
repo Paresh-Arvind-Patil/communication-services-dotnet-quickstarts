@@ -14,7 +14,7 @@ builder.Services.AddSwaggerGen();
 //Fetch configuration and add call automation as singleton service
 var callConfigurationSection = builder.Configuration.GetSection(nameof(CallConfiguration));
 builder.Services.Configure<CallConfiguration>(callConfigurationSection);
-builder.Services.AddSingleton(new CallAutomationClient(pmaEndpoint: new Uri("https://x-pma-euno-01.plat.skype.com:6448/"), callConfigurationSection["ConnectionString"]));
+builder.Services.AddSingleton(new CallAutomationClient(pmaEndpoint: new Uri("pma-base-url"), callConfigurationSection["ConnectionString"]));
 var app = builder.Build();
 
 var sourceIdentity = await app.ProvisionAzureCommunicationServicesIdentity(callConfigurationSection["ConnectionString"]);
@@ -159,8 +159,10 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
             var recognizeCompletedEvent = (RecognizeCompleted)@event;
 
             // Check for time out, and then play audio message
-
-            var playSource = new TextSource("Your appointment has been confirmed, Disconnecting the call. Thank you!")
+            var tones = recognizeCompletedEvent.CollectTonesResult.Tones.Select(tone => tone);
+            string collectedTones = string.Join(", ", tones);
+            
+            var playSource = new TextSource($"Your appointment is confirmed and the confirmation has been sent to your phone number {collectedTones}. Disconnecting the call. Thank you!")
             {
                 SourceLocale = "en-US",
                 VoiceGender = GenderType.Female,
@@ -169,7 +171,6 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
 
             //Play audio for time out
             await callConnectionMedia.PlayToAllAsync(playSource, new PlayOptions { OperationContext = "PlayAudioCompletedEndCall", Loop = false });
-             
         }
         if (@event is RecognizeFailed { OperationContext: "MakeAppointment" })
         {
@@ -198,7 +199,10 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
             logger.LogInformation($"RecognizeCompleted (CancelAppointment) event received for call connection id: {@event.CallConnectionId}");
             var recognizeCompletedEvent = (RecognizeCompleted)@event;
 
-            var playSource = new TextSource("Your appointment has been cancelled, Disconnecting the call. Thank you!")
+            var tones = recognizeCompletedEvent.CollectTonesResult.Tones.Select(tone => tone.ToString());
+            string collectedTones = string.Join(", ", tones);
+
+            var playSource = new TextSource($"Your appointment with id {collectedTones} has been canceled, Disconnecting the call. Thank you!")
             {
                 SourceLocale = "en-US",
                 VoiceGender = GenderType.Female,
@@ -231,16 +235,6 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
                 await callConnectionMedia.PlayToAllAsync(playSource, new PlayOptions { OperationContext = "PlayAudioCompletedEndCall", Loop = false });
             }
         }
-        if (@event is PlayCompleted { OperationContext: "PlayAudioCompletedEndCall" })
-        {
-            logger.LogInformation($"PlayCompleted event received for call connection id: {@event.CallConnectionId}");
-            await callConnection.HangUpAsync(forEveryone: true);
-        }
-        if (@event is PlayFailed { OperationContext: "PlayAudioCompletedEndCall" })
-        {
-            logger.LogInformation($"PlayFailed event received for call connection id: {@event.CallConnectionId}");
-            await callConnection.HangUpAsync(forEveryone: true);
-        }
         if (@event is PlayCompleted { OperationContext: "CustomerSupport" })
         {
             logger.LogInformation($"PlayCompleted event received for call connection id: {@event.CallConnectionId}");
@@ -251,6 +245,17 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
             logger.LogInformation($"PlayFailed event received for call connection id: {@event.CallConnectionId}");
             await callConnection.HangUpAsync(forEveryone: true);
         }
+        if (@event is PlayCompleted { OperationContext: "PlayAudioCompletedEndCall" })
+        {
+            logger.LogInformation($"PlayCompleted event received for call connection id: {@event.CallConnectionId}");
+            await callConnection.HangUpAsync(forEveryone: true);
+        }
+        if (@event is PlayFailed { OperationContext: "PlayAudioCompletedEndCall" })
+        {
+            logger.LogInformation($"PlayFailed event received for call connection id: {@event.CallConnectionId}");
+            await callConnection.HangUpAsync(forEveryone: true);
+        }
+        
     }
     return Results.Ok();
 }).Produces(StatusCodes.Status200OK);
