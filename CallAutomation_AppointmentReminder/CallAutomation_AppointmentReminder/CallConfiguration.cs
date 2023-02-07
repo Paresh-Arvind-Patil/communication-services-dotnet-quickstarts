@@ -34,6 +34,11 @@ namespace CallAutomation_AppointmentReminder
         public string AppBaseUri { get; set; }
 
         /// <summary>
+        /// The cognitive service resources endpoint used for media features
+        /// </summary>
+        public string CognitiveServiceEndpoint { get; set; }
+
+        /// <summary>
         /// The base url of the applicaiton.
         /// </summary>
         public string EventCallBackRoute { get; set; }

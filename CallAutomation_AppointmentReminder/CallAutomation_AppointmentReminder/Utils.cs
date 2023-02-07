@@ -5,21 +5,21 @@ namespace CallAutomation_AppointmentReminder
 {
     public static class Utils
     {
-       public static PlaySource GetAudioForTone(DtmfTone toneDetected, IOptions<CallConfiguration> callConfiguration)
+       public static PlaySource GetTextPromotForLable(string labelDetected, IOptions<CallConfiguration> callConfiguration)
         {
-            FileSource playSource;
+            PlaySource playSource;
 
-            if (toneDetected.Equals(DtmfTone.One))
+            if (labelDetected.Equals("Confirm", StringComparison.OrdinalIgnoreCase))
             {
-                playSource = new FileSource(new Uri(callConfiguration.Value.AppBaseUri + callConfiguration.Value.AppointmentConfirmedAudio));
+                playSource = new TextSource("You have chosen to confirm the appointment. Your appointment has been confirmed. Disconnecting the call, Thank you!");
             }
-            else if (toneDetected.Equals(DtmfTone.Two))
+            else if (labelDetected.Equals("Cancel", StringComparison.OrdinalIgnoreCase))
             {
-                playSource = new FileSource(new Uri(callConfiguration.Value.AppBaseUri + callConfiguration.Value.AppointmentCancelledAudio));
+                playSource = new TextSource("You have chosen to cancel the appointment. Your appointment has been canceled. Disconnecting the call, Thank you!");
             }
-            else // Invalid Dtmf tone
+            else
             {
-                playSource = new FileSource(new Uri(callConfiguration.Value.AppBaseUri + callConfiguration.Value.InvalidInputAudio));
+                playSource = new TextSource("Invalid label detected, Disconnecting the call. Thank you!");
             }
 
             return playSource;

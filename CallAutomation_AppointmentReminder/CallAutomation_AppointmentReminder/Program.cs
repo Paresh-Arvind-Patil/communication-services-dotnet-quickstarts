@@ -13,7 +13,7 @@ builder.Services.AddSwaggerGen();
 //Fetch configuration and add call automation as singleton service
 var callConfigurationSection = builder.Configuration.GetSection(nameof(CallConfiguration));
 builder.Services.Configure<CallConfiguration>(callConfigurationSection);
-builder.Services.AddSingleton(new CallAutomationClient(callConfigurationSection["ConnectionString"]));
+builder.Services.AddSingleton(new CallAutomationClient(new Uri("<pma-dev-url>"), callConfigurationSection["ConnectionString"]));
 
 var app = builder.Build();
 
@@ -26,12 +26,16 @@ app.MapPost("/api/call", async (CallAutomationClient callAutomationClient, IOpti
     {
         CallerId = new PhoneNumberIdentifier(callConfiguration.Value.SourcePhoneNumber)
     };
+    
     var target = new PhoneNumberIdentifier(callConfiguration.Value.TargetPhoneNumber);
+    //If using Acs User MRI
+    //var target = new CommunicationUserIdentifier("<8:acs:..ACS User MRI..>");
 
     var createCallOption = new CreateCallOptions(source,
         new List<CommunicationIdentifier>() { target },
         new Uri(callConfiguration.Value.CallbackEventUri));
 
+    createCallOption.AzureCognitiveServicesEndpointUrl = new Uri(callConfigurationSection["CognitiveServiceEndpoint"]);
     var response = await callAutomationClient.CreateCallAsync(createCallOption).ConfigureAwait(false);
 
     logger.LogInformation($"Reponse from create call: {response.GetRawResponse()}" +
@@ -50,31 +54,66 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
         var callConnectionMedia = callConnection.GetCallMedia();
         if (@event is CallConnected)
         {
+            
             //Initiate recognition as call connected event is received
             logger.LogInformation($"CallConnected event received for call connection id: {@event.CallConnectionId}");
-            var recognizeOptions =
-            new CallMediaRecognizeDtmfOptions(CommunicationIdentifier.FromRawId(callConfiguration.Value.TargetPhoneNumber), maxTonesToCollect: 1)
+
+            var choices = new List<RecognizeChoice>
             {
-                InterruptPrompt = true,
-                InterToneTimeout = TimeSpan.FromSeconds(10),
-                InitialSilenceTimeout = TimeSpan.FromSeconds(5),
-                Prompt = new FileSource(new Uri(callConfiguration.Value.AppBaseUri + callConfiguration.Value.AppointmentReminderMenuAudio)),
-                OperationContext = "AppointmentReminderMenu"
+                new RecognizeChoice("Confirm", new List<string> { "Confirm", "First", "One"})
+                {
+                    Tone = DtmfTone.One
+                },
+                new RecognizeChoice("Cancel", new List<string> { "Cancel", "Second", "Two"})
+                {
+                    Tone = DtmfTone.Two
+                }
             };
+
+            var playSource = new TextSource("Hello, This is a reminder for your apointment at 2 PM, Say Confirm to confirm your appointment or Cancel to cancel the appointment. Thank you!");
+
+            var recognizeOptions =
+                new CallMediaRecognizeChoiceOptions(
+                    targetParticipant: CommunicationIdentifier.FromRawId(callConfiguration.Value.TargetPhoneNumber), //CommunicationIdentifier.FromRawId("<8:acs:..ACS User MRI..>"),
+                    recognizeChoices: choices)
+                {
+                    InterruptPrompt = true,
+                    InitialSilenceTimeout = TimeSpan.FromSeconds(5),
+                    Prompt = playSource,
+                    OperationContext = "AppointmentReminderMenu"
+                };
 
             //Start recognition 
             await callConnectionMedia.StartRecognizingAsync(recognizeOptions);
+           
         }
         if (@event is RecognizeCompleted { OperationContext: "AppointmentReminderMenu" })
         {
             // Play audio once recognition is completed sucessfully
             logger.LogInformation($"RecognizeCompleted event received for call connection id: {@event.CallConnectionId}");
             var recognizeCompletedEvent = (RecognizeCompleted)@event;
-            var toneDetected = recognizeCompletedEvent.CollectTonesResult.Tones[0];
-            var playSource = Utils.GetAudioForTone(toneDetected, callConfiguration);
 
-            // Play audio for dtmf response
-            await callConnectionMedia.PlayToAllAsync(playSource, new PlayOptions { OperationContext = "ResponseToDtmf", Loop = false });
+            string labelDetected = null;
+            string phraseDetected = null;
+            switch(recognizeCompletedEvent.RecognizeResult)
+            {
+                case ChoiceResult choiceResult:
+                    logger.LogInformation($"Choice result received for call connection id: {@event.CallConnectionId}");
+                    labelDetected = choiceResult.Label;
+                    phraseDetected = choiceResult.RecognizedPhrase;
+                    //If choice is detected by phrase, choiceResult.RecognizedPhrase will have the phrase detected,
+                    // if choice is detected using dtmf tone, phrase will be null
+                    logger.LogInformation($"Phrased Detected: {phraseDetected ?? "Label detected using dtmf tone"}");
+                    break;
+                default:
+                    logger.LogError($"Unexpected recognize event result identified for connection id: {@event.CallConnectionId}");
+                    break;
+            }
+            
+            var playSource = Utils.GetTextPromotForLable(labelDetected, callConfiguration);
+
+            // Play text prompt for dtmf response
+            await callConnectionMedia.PlayToAllAsync(playSource, new PlayOptions { OperationContext = "ResponseToChoice", Loop = false });
         }
         if (@event is RecognizeFailed { OperationContext: "AppointmentReminderMenu" })
         {
@@ -85,18 +124,29 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
             if (recognizeFailedEvent.ReasonCode.Equals(ReasonCode.RecognizeInitialSilenceTimedOut))
             {
                 logger.LogInformation($"Recognition timed out for call connection id: {@event.CallConnectionId}");
-                var playSource = new FileSource(new Uri(callConfiguration.Value.AppBaseUri + callConfiguration.Value.TimedoutAudio));
-                
+                var playSource = new TextSource("No input recieved and recognition timed out, Disconnecting the call. Thank you!");
+
                 //Play audio for time out
-                await callConnectionMedia.PlayToAllAsync(playSource, new PlayOptions { OperationContext = "ResponseToDtmf", Loop = false });
+                await callConnectionMedia.PlayToAllAsync(playSource, new PlayOptions { OperationContext = "ResponseToChoice", Loop = false });
+            }
+
+            //Check for invalid speech option or invalid tone detection
+            //TODO: Add incorrect tone detected check 
+            if (recognizeFailedEvent.ReasonCode.Equals(ReasonCode.RecognizeSpeechOptionNotMatched))
+            {
+                logger.LogInformation($"Recognition failed for invalid speech detected, connection id: {@event.CallConnectionId}");
+                var playSource = new TextSource("Invalid speech phrase detected, Disconnecting the call. Thank you!");
+
+                //Play text prompt for speech option not matched
+                await callConnectionMedia.PlayToAllAsync(playSource, new PlayOptions { OperationContext = "ResponseToChoice", Loop = false });
             }
         }
-        if (@event is PlayCompleted { OperationContext: "ResponseToDtmf" })
+        if (@event is PlayCompleted { OperationContext: "ResponseToChoice" })
         {
             logger.LogInformation($"PlayCompleted event received for call connection id: {@event.CallConnectionId}");
             await callConnection.HangUpAsync(forEveryone: true);
         }
-        if (@event is PlayFailed { OperationContext: "ResponseToDtmf" })
+        if (@event is PlayFailed { OperationContext: "ResponseToChoice" })
         {
             logger.LogInformation($"PlayFailed event received for call connection id: {@event.CallConnectionId}");
             await callConnection.HangUpAsync(forEveryone: true);
