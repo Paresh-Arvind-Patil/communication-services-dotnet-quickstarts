@@ -1,12 +1,12 @@
 ﻿using Azure.Communication.CallAutomation;
-using Microsoft.Extensions.Options;
+using Azure.Communication.Identity;
 
 namespace CallAutomation_AppointmentReminder
 {
-    public static class Utils
+    public static class CallAutomationMediaHelper
     {
-       public static PlaySource GetTextPromotForLable(string labelDetected, IOptions<CallConfiguration> callConfiguration)
-        {
+       public static PlaySource GetTextPromptForLable(string labelDetected)
+       {
             PlaySource playSource;
 
             if (labelDetected.Equals("Confirm", StringComparison.OrdinalIgnoreCase))
@@ -23,6 +23,13 @@ namespace CallAutomation_AppointmentReminder
             }
 
             return playSource;
+       }
+
+        public async static Task<string> ProvisionAzureCommunicationServicesIdentity(string connectionString)
+        {
+            var client = new CommunicationIdentityClient(connectionString);
+            var user = await client.CreateUserAsync().ConfigureAwait(false);
+            return user.Value.Id;
         }
     }
 }

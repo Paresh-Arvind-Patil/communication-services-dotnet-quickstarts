@@ -34,9 +34,9 @@ namespace CallAutomation_AppointmentReminder
         public string AppBaseUri { get; set; }
 
         /// <summary>
-        /// The cognitive service resources endpoint used for media features
+        /// The cognitive service resource endpoint required for media features
         /// </summary>
-        public string CognitiveServiceEndpoint { get; set; }
+        public string AzureCognitiveServicesEndpoint { get; set; }
 
         /// <summary>
         /// The base url of the applicaiton.

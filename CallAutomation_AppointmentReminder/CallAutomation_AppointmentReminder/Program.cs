@@ -13,29 +13,26 @@ builder.Services.AddSwaggerGen();
 //Fetch configuration and add call automation as singleton service
 var callConfigurationSection = builder.Configuration.GetSection(nameof(CallConfiguration));
 builder.Services.Configure<CallConfiguration>(callConfigurationSection);
-builder.Services.AddSingleton(new CallAutomationClient(new Uri("<pma-dev-url>"), callConfigurationSection["ConnectionString"]));
+
+
+var sourceIdentity = await CallAutomationMediaHelper.ProvisionAzureCommunicationServicesIdentity(callConfigurationSection["ConnectionString"]);
+var callAutoamtionOptions = new CallAutomationClientOptions(source: new CommunicationUserIdentifier(sourceIdentity));
+builder.Services.AddSingleton(new CallAutomationClient(callConfigurationSection["ConnectionString"], callAutoamtionOptions));
 
 var app = builder.Build();
 
-var sourceIdentity = await app.ProvisionAzureCommunicationServicesIdentity(callConfigurationSection["ConnectionString"]);
 
 // Api to initiate out bound call
 app.MapPost("/api/call", async (CallAutomationClient callAutomationClient, IOptions<CallConfiguration> callConfiguration, ILogger<Program> logger) =>
 {
-    var source = new CallSource(new CommunicationUserIdentifier(sourceIdentity))
-    {
-        CallerId = new PhoneNumberIdentifier(callConfiguration.Value.SourcePhoneNumber)
-    };
-    
-    var target = new PhoneNumberIdentifier(callConfiguration.Value.TargetPhoneNumber);
-    //If using Acs User MRI
-    //var target = new CommunicationUserIdentifier("<8:acs:..ACS User MRI..>");
-
-    var createCallOption = new CreateCallOptions(source,
-        new List<CommunicationIdentifier>() { target },
+    var targetPhoneNumber = new PhoneNumberIdentifier(callConfiguration.Value.TargetPhoneNumber);
+    var sourcePhoneNumber = new PhoneNumberIdentifier(callConfiguration.Value.SourcePhoneNumber);
+    var callInvite = new CallInvite(targetPhoneNumberIdentity: targetPhoneNumber, callerIdNumber: sourcePhoneNumber);
+    var createCallOption = new CreateCallOptions(
+        callInvite,
         new Uri(callConfiguration.Value.CallbackEventUri));
 
-    createCallOption.AzureCognitiveServicesEndpointUrl = new Uri(callConfigurationSection["CognitiveServiceEndpoint"]);
+    createCallOption.AzureCognitiveServicesEndpointUrl = new Uri(callConfigurationSection["AzureCognitiveServicesEndpoint"]);
     var response = await callAutomationClient.CreateCallAsync(createCallOption).ConfigureAwait(false);
 
     logger.LogInformation($"Reponse from create call: {response.GetRawResponse()}" +
@@ -70,13 +67,18 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
                 }
             };
 
-            var playSource = new TextSource("Hello, This is a reminder for your apointment at 2 PM, Say Confirm to confirm your appointment or Cancel to cancel the appointment. Thank you!");
+            var playSource = new TextSource("Hello, This is a reminder for your apointment at 2 PM, Say Confirm to confirm your appointment or Cancel to cancel the appointment. Thank you!")
+            {
+                SourceLocale = "en-en-en-US",
+            };
+
 
             var recognizeOptions =
                 new CallMediaRecognizeChoiceOptions(
                     targetParticipant: CommunicationIdentifier.FromRawId(callConfiguration.Value.TargetPhoneNumber), //CommunicationIdentifier.FromRawId("<8:acs:..ACS User MRI..>"),
                     recognizeChoices: choices)
                 {
+                    SpeechLanguage = "en-US",
                     InterruptPrompt = true,
                     InitialSilenceTimeout = TimeSpan.FromSeconds(5),
                     Prompt = playSource,
@@ -93,8 +95,13 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
             logger.LogInformation($"RecognizeCompleted event received for call connection id: {@event.CallConnectionId}");
             var recognizeCompletedEvent = (RecognizeCompleted)@event;
 
+
+            var rc = CallAutomationModelFactory.RecognizeCompleted();
+
+
             string labelDetected = null;
             string phraseDetected = null;
+
             switch(recognizeCompletedEvent.RecognizeResult)
             {
                 case ChoiceResult choiceResult:
@@ -110,7 +117,7 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
                     break;
             }
             
-            var playSource = Utils.GetTextPromotForLable(labelDetected, callConfiguration);
+            var playSource = CallAutomationMediaHelper.GetTextPromptForLable(labelDetected);
 
             // Play text prompt for dtmf response
             await callConnectionMedia.PlayToAllAsync(playSource, new PlayOptions { OperationContext = "ResponseToChoice", Loop = false });
@@ -124,8 +131,12 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
             if (recognizeFailedEvent.ReasonCode.Equals(ReasonCode.RecognizeInitialSilenceTimedOut))
             {
                 logger.LogInformation($"Recognition timed out for call connection id: {@event.CallConnectionId}");
-                var playSource = new TextSource("No input recieved and recognition timed out, Disconnecting the call. Thank you!");
-
+                
+                var playSource = new TextSource("No input recieved and recognition timed out, Disconnecting the call. Thank you!") { 
+                
+                        SourceLocale = "en-US",
+                };
+                
                 //Play audio for time out
                 await callConnectionMedia.PlayToAllAsync(playSource, new PlayOptions { OperationContext = "ResponseToChoice", Loop = false });
             }
