@@ -16,18 +16,21 @@ builder.Services.Configure<CallConfiguration>(callConfigurationSection);
 
 
 var sourceIdentity = await CallAutomationMediaHelper.ProvisionAzureCommunicationServicesIdentity(callConfigurationSection["ConnectionString"]);
+var targetAcsUserMri = "<ACS-User-Identity>";
 var callAutoamtionOptions = new CallAutomationClientOptions(source: new CommunicationUserIdentifier(sourceIdentity));
 builder.Services.AddSingleton(new CallAutomationClient(callConfigurationSection["ConnectionString"], callAutoamtionOptions));
 
 var app = builder.Build();
-
 
 // Api to initiate out bound call
 app.MapPost("/api/call", async (CallAutomationClient callAutomationClient, IOptions<CallConfiguration> callConfiguration, ILogger<Program> logger) =>
 {
     var targetPhoneNumber = new PhoneNumberIdentifier(callConfiguration.Value.TargetPhoneNumber);
     var sourcePhoneNumber = new PhoneNumberIdentifier(callConfiguration.Value.SourcePhoneNumber);
-    var callInvite = new CallInvite(targetPhoneNumberIdentity: targetPhoneNumber, callerIdNumber: sourcePhoneNumber);
+    //var callInvite = new CallInvite(targetPhoneNumberIdentity: targetPhoneNumber, callerIdNumber: sourcePhoneNumber);
+    var targetAcsUser = new CommunicationUserIdentifier(targetAcsUserMri);
+    var callInvite = new CallInvite(targetIdentity: targetAcsUser);
+
     var createCallOption = new CreateCallOptions(
         callInvite,
         new Uri(callConfiguration.Value.CallbackEventUri));
@@ -51,31 +54,25 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
         var callConnectionMedia = callConnection.GetCallMedia();
         if (@event is CallConnected)
         {
-            
-            //Initiate recognition as call connected event is received
             logger.LogInformation($"CallConnected event received for call connection id: {@event.CallConnectionId}");
-
+            
             var choices = new List<RecognizeChoice>
             {
                 new RecognizeChoice("Confirm", new List<string> { "Confirm", "First", "One"})
                 {
                     Tone = DtmfTone.One
                 },
-                new RecognizeChoice("Cancel", new List<string> { "Cancel", "Second", "Two"})
+                new RecognizeChoice("Cancel", new List<string> { "Cancel", "Two", "Second"})
                 {
                     Tone = DtmfTone.Two
                 }
             };
-
-            var playSource = new TextSource("Hello, This is a reminder for your apointment at 2 PM, Say Confirm to confirm your appointment or Cancel to cancel the appointment. Thank you!")
-            {
-                SourceLocale = "en-en-en-US",
-            };
-
+            
+            var playSource = new TextSource("Hello, This is a reminder for your apointment at 2 PM, Say Confirm to confirm your appointment or Cancel to cancel the appointment. Thank you!");
 
             var recognizeOptions =
                 new CallMediaRecognizeChoiceOptions(
-                    targetParticipant: CommunicationIdentifier.FromRawId(callConfiguration.Value.TargetPhoneNumber), //CommunicationIdentifier.FromRawId("<8:acs:..ACS User MRI..>"),
+                    targetParticipant: CommunicationIdentifier.FromRawId(targetAcsUserMri),
                     recognizeChoices: choices)
                 {
                     SpeechLanguage = "en-US",
@@ -84,20 +81,13 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
                     Prompt = playSource,
                     OperationContext = "AppointmentReminderMenu"
                 };
-
-            //Start recognition 
-            await callConnectionMedia.StartRecognizingAsync(recognizeOptions);
-           
+                await callConnectionMedia.StartRecognizingAsync(recognizeOptions);
         }
         if (@event is RecognizeCompleted { OperationContext: "AppointmentReminderMenu" })
         {
             // Play audio once recognition is completed sucessfully
             logger.LogInformation($"RecognizeCompleted event received for call connection id: {@event.CallConnectionId}");
             var recognizeCompletedEvent = (RecognizeCompleted)@event;
-
-
-            var rc = CallAutomationModelFactory.RecognizeCompleted();
-
 
             string labelDetected = null;
             string phraseDetected = null;
@@ -157,9 +147,10 @@ app.MapPost("/api/callbacks", async (CloudEvent[] cloudEvents, CallAutomationCli
             logger.LogInformation($"PlayCompleted event received for call connection id: {@event.CallConnectionId}");
             await callConnection.HangUpAsync(forEveryone: true);
         }
-        if (@event is PlayFailed { OperationContext: "ResponseToChoice" })
+        if (@event is PlayCanceled)
         {
-            logger.LogInformation($"PlayFailed event received for call connection id: {@event.CallConnectionId}");
+            logger.LogInformation($"PlayCanceled event received for call connection id: {@event.CallConnectionId}");
+            //Take action on recognize canceled operation
             await callConnection.HangUpAsync(forEveryone: true);
         }
     }

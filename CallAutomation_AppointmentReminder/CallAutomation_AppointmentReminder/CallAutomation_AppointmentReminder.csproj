@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Azure.Communication.CallAutomation" Version="1.0.0-alpha.20230227.1" />
+    <PackageReference Include="Azure.Communication.CallAutomation" Version="1.0.0-alpha.20230228.1" />
     <PackageReference Include="Azure.Communication.Identity" Version="1.2.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.2.3" />
