@@ -1,4 +1,5 @@
-﻿using Azure.Communication.Email;
+﻿using Azure;
+using Azure.Communication.Email;
 using System;
 using System.Threading.Tasks;
 
@@ -12,40 +13,33 @@ namespace SendEmailPlainText
             var connectionString = "<ACS_CONNECTION_STRING>";
             var emailClient = new EmailClient(connectionString);
 
+            var sender = "<SENDER_EMAIL>";
+            var recipient = "<RECIPIENT_EMAIL>";
             var subject = "Send email plain text sample";
+
             var emailContent = new EmailContent(subject)
             {
                 PlainText = "This is plain text mail send test body \n Best Wishes!!",
             };
-            var sender = "<SENDER_EMAIL>";
-            var recipient = "<RECIPIENT_EMAIL>";
 
             var emailMessage = new EmailMessage(sender, recipient, emailContent);
 
             try
             {
-                Console.WriteLine("Sending email with plain text content...");
-                EmailSendOperation emailSendOperation = await emailClient.SendAsync(Azure.WaitUntil.Completed, emailMessage);
-                EmailSendResult statusMonitor = emailSendOperation.Value;
+                var emailSendOperation = await emailClient.SendAsync(
+                    wait: WaitUntil.Completed,
+                    message: emailMessage);
 
+                Console.WriteLine($"Email Sent. Status = {emailSendOperation.Value.Status}");
+
+                /// Get the OperationId so that it can be used for tracking the message for troubleshooting
                 string operationId = emailSendOperation.Id;
-                var emailSendStatus = statusMonitor.Status;
-
-                if (emailSendStatus == EmailSendStatus.Succeeded)
-                {
-                    Console.WriteLine($"Email send operation succeeded with OperationId = {operationId}.\nEmail is out for delivery.");
-                }
-                else
-                {
-                    var error = statusMonitor.Error;
-                    Console.WriteLine($"Failed to send email.\n OperationId = {operationId}.\n Status = {emailSendStatus}.");
-                    Console.WriteLine($"Error Code = {error.Code}, Message = {error.Message}");
-                    return;
-                }
+                Console.WriteLine($"Email operation id = {operationId}");
             }
-            catch (Exception ex)
+            catch (RequestFailedException ex)
             {
-                Console.WriteLine($"Error in sending email, {ex}");
+                /// OperationID is contained in the exception message and can be used for troubleshooting purposes
+                Console.WriteLine($"Email send operation failed with error code: {ex.ErrorCode}, message: {ex.Message}");
             }
         }
     }
