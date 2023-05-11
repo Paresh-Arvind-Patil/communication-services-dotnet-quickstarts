@@ -86,7 +86,7 @@ app.MapPost("/api/callbacks/{contextId}", async (
     {
         logger.LogInformation($"Event received: {JsonConvert.SerializeObject(cloudEvent)}");
 
-        CallAutomationEventData @event = CallAutomationEventParser.Parse(cloudEvent);
+        CallAutomationEventBase @event = CallAutomationEventParser.Parse(cloudEvent);
         var callConnection = callAutomationClient.GetCallConnection(@event.CallConnectionId);
         var callConnectionMedia = callConnection.GetCallMedia();
 

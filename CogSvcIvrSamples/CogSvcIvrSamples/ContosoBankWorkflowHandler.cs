@@ -18,24 +18,30 @@ namespace CogSvcIvrSamples
             this.playVoiceExpression = "friendly";
         }
 
-        public async Task HandleAsync(string callerId, CallAutomationEventData @event, CallConnection callConnection, CallMedia callConnectionMedia)
+        public async Task HandleAsync(string callerId, CallAutomationEventBase @event, CallConnection callConnection, CallMedia callConnectionMedia)
         {
-            if (@event is CallConnectedEventData)
+            if (@event is CallConnected)
             {
                 // play greeting message
                 var greetingPlaySource = "Welcome to Contoso Bank, I’m Dave. Please note that this call will be recorded for quality assurance."
                 .ToSsmlPlaySource(voiceName: playVoiceName, expression: playVoiceExpression);
-                await callConnectionMedia.PlayToAllAsync(greetingPlaySource, new PlayOptions { OperationContext = "GreetingMessage", Loop = false });
+                var playOptions = new PlayToAllOptions(greetingPlaySource)
+                {
+                    OperationContext = "GreetingMessage",
+                    Loop = false
+                };
+
+                await callConnectionMedia.PlayToAllAsync(playOptions);
             }
 
-            if (@event is PlayCompletedEventData { OperationContext: "GreetingMessage" })
+            if (@event is PlayCompleted { OperationContext: "GreetingMessage" })
             {
                 await HandlePinAuthAsync(callerId, callConnectionMedia, context: "IdentificationResult", prompt: "For identification purposes please key in or say the last 4 digits of your customer number.");
             }
 
-            if (@event is RecognizeCompletedEventData { OperationContext: "IdentificationResult" })
+            if (@event is RecognizeCompleted { OperationContext: "IdentificationResult" })
             {
-                var identificationPin = GetPinFromSpeechOrDtmf((RecognizeCompletedEventData)@event);
+                var identificationPin = GetPinFromSpeechOrDtmf((RecognizeCompleted)@event);
                 if (ValidatePin(identificationPin, callerId))
                 {
                     await HandleMainMenuAsync(callerId, callConnectionMedia);
@@ -46,10 +52,10 @@ namespace CogSvcIvrSamples
                 }
             }
 
-            if (@event is RecognizeCompletedEventData { OperationContext: "OpenQuestionSpeech" } || 
-                @event is RecognizeCompletedEventData { OperationContext: "MainMenuReconfirmResult" })
+            if (@event is RecognizeCompleted { OperationContext: "OpenQuestionSpeech" } || 
+                @event is RecognizeCompleted { OperationContext: "MainMenuReconfirmResult" })
             {
-                var result = ((RecognizeCompletedEventData)@event).RecognizeResult;
+                var result = ((RecognizeCompleted)@event).RecognizeResult;
                 if (result == null)
                 {
                     logger.LogInformation($"Received null or empty result for open question prompt");
@@ -130,18 +136,18 @@ namespace CogSvcIvrSamples
                 await HandleMainMenuReconfirmAsync(callerId, callConnectionMedia);
             }
 
-            if (@event is RecognizeFailedEventData { OperationContext: "OpenQuestionSpeech" })
+            if (@event is RecognizeFailed { OperationContext: "OpenQuestionSpeech" })
             {
-                var result = (RecognizeFailedEventData)@event;
+                var result = (RecognizeFailed)@event;
                 if (result.ResultInformation?.Code >= 400 &&  result.ResultInformation.SubCode == 8510)
                 {
                     await HandleMainMenuReconfirmAsync(callerId, callConnectionMedia);
                 }
             }
 
-            if (@event is RecognizeCompletedEventData { OperationContext: "BalancePinAuth" })
+            if (@event is RecognizeCompleted { OperationContext: "BalancePinAuth" })
             {
-                var authPin = GetPinFromSpeechOrDtmf((RecognizeCompletedEventData)@event);
+                var authPin = GetPinFromSpeechOrDtmf((RecognizeCompleted)@event);
                 if (ValidatePin(authPin, callerId))
                 {
                     await HandleReadBalanceAsync(callerId, callConnectionMedia);
@@ -153,9 +159,9 @@ namespace CogSvcIvrSamples
 
             }
 
-            if (@event is RecognizeCompletedEventData { OperationContext: "BalanceEndInputResult" })
+            if (@event is RecognizeCompleted { OperationContext: "BalanceEndInputResult" })
             {
-                var result = (DtmfResult)((RecognizeCompletedEventData)@event).RecognizeResult;
+                var result = (DtmfResult)((RecognizeCompleted)@event).RecognizeResult;
                 if (result.Tones[0] == DtmfTone.Zero)
                 {
                     await HandleMainMenuAsync(callerId, callConnectionMedia);
@@ -166,9 +172,9 @@ namespace CogSvcIvrSamples
                 }
             }
 
-            if (@event is RecognizeCompletedEventData { OperationContext: "AddressChangeChoiceReconfirm" })
+            if (@event is RecognizeCompleted { OperationContext: "AddressChangeChoiceReconfirm" })
             {
-                var result = (SpeechResult)((RecognizeCompletedEventData)@event).RecognizeResult;
+                var result = (SpeechResult)((RecognizeCompleted)@event).RecognizeResult;
                 var speech = result?.Speech ?? "";
                 if ((speech.Contains("yes", StringComparison.OrdinalIgnoreCase) || speech.Contains("confirmed")) && !speech.Contains("no", StringComparison.OrdinalIgnoreCase))
                 {
@@ -180,15 +186,15 @@ namespace CogSvcIvrSamples
                 }
             }
 
-            if (@event is RecognizeCompletedEventData { OperationContext: "AddressChangeResult" })
+            if (@event is RecognizeCompleted { OperationContext: "AddressChangeResult" })
             {
-                var address = ((SpeechResult)((RecognizeCompletedEventData)@event).RecognizeResult).Speech;
+                var address = ((SpeechResult)((RecognizeCompleted)@event).RecognizeResult).Speech;
                 await HandleReconfirmNewAddressAsync(callerId, callConnectionMedia, address);
             }
 
-            if (@event is RecognizeCompletedEventData { OperationContext: "ReconfirmNewAddressResult" })
+            if (@event is RecognizeCompleted { OperationContext: "ReconfirmNewAddressResult" })
             {
-                var confirmation = ((SpeechResult)((RecognizeCompletedEventData)@event).RecognizeResult).Speech;
+                var confirmation = ((SpeechResult)((RecognizeCompleted)@event).RecognizeResult).Speech;
                 if (confirmation.Contains("confirm", StringComparison.OrdinalIgnoreCase) ||
                     confirmation.Contains("yes", StringComparison.OrdinalIgnoreCase)||
                     confirmation.Contains("affirmative", StringComparison.OrdinalIgnoreCase)||
@@ -202,12 +208,12 @@ namespace CogSvcIvrSamples
                 }
             }
 
-            if (@event is RecognizeFailedEventData)
+            if (@event is RecognizeFailed)
             {
                 await HandleEndCallPromptAsync(callConnectionMedia, prompt: "No valid input received. This call will be ended. Good Bye!");
             }
 
-            if (@event is PlayCompletedEventData { OperationContext: "EndCallPrompt" } || @event is PlayFailedEventData)
+            if (@event is PlayCompleted { OperationContext: "EndCallPrompt" } || @event is PlayFailed)
             {
                 await callConnection.HangUpAsync(forEveryone: true);
             }
@@ -333,7 +339,7 @@ namespace CogSvcIvrSamples
         {
             prompt ??= "This call will be ended. Good Bye!";
             var endCallPrompt = prompt.ToSsmlPlaySource(voiceName: playVoiceName, expression: playVoiceExpression, playSourceId: GetPlaySourceId("EndCallPrompt"));
-            await callConnectionMedia.PlayToAllAsync(endCallPrompt, new PlayOptions { OperationContext = "EndCallPrompt", Loop = false });
+            await callConnectionMedia.PlayToAllAsync(new PlayToAllOptions(endCallPrompt){ OperationContext = "EndCallPrompt", Loop = false });
         }
 
         string GetCustomerName(string callerId)
@@ -346,7 +352,7 @@ namespace CogSvcIvrSamples
             return playSourceBaseId + name;
         }
 
-        private string GetPinFromSpeechOrDtmf(RecognizeCompletedEventData eventData)
+        private string GetPinFromSpeechOrDtmf(RecognizeCompleted eventData)
         {
             switch (eventData.RecognizeResult)
             {

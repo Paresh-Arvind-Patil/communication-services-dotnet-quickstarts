@@ -5,7 +5,7 @@ namespace CogSvcIvrSamples
     public interface IWorkflowHandler
     {
         Task HandleAsync(string callerId,
-            CallAutomationEventData @event,
+            CallAutomationEventBase @event,
             CallConnection callConnection,
             CallMedia callConnectionMedia);
     }

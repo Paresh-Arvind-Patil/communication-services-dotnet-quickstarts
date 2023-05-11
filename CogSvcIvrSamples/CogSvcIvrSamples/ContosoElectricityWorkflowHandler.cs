@@ -16,18 +16,18 @@ namespace CogSvcIvrSamples
 
         public async Task HandleAsync(
             string callerId,
-            CallAutomationEventData @event,
+            CallAutomationEventBase @event,
             CallConnection callConnection,
             CallMedia callConnectionMedia)
         {
-            if (@event is CallConnectedEventData)
+            if (@event is CallConnected)
             {
                 await HandleWelcomMessageAsync(callConnectionMedia, callerId);
             }
 
-            if (@event is RecognizeCompletedEventData)
+            if (@event is RecognizeCompleted)
             {
-                var recognizeCompletedEvent = (RecognizeCompletedEventData)@event;
+                var recognizeCompletedEvent = (RecognizeCompleted)@event;
                 switch (recognizeCompletedEvent.RecognizeResult)
                 {
                     case ChoiceResult choiceResult:
@@ -67,57 +67,68 @@ namespace CogSvcIvrSamples
                 }
             }
 
-            if (@event is RecognizeFailedEventData)
+            if (@event is RecognizeFailed)
             {
-                var recognizeFailedEvent = (RecognizeFailedEventData)@event;
+                var recognizeFailedEvent = (RecognizeFailed)@event;
 
                 // Check for time out, and then play audio message
-                if (recognizeFailedEvent.ReasonCode.Equals(ReasonCode.RecognizeInitialSilenceTimedOut))
+                if (recognizeFailedEvent.ReasonCode.Equals(MediaEventReasonCode.RecognizeInitialSilenceTimedOut))
                 {
                     logger.LogInformation($"Recognition timed out for call connection id: {@event.CallConnectionId}");
                     var playSource = "No input recieved and recognition timed out, Disconnecting the call. Thank you!"
                     .ToTextPlaySource(playSourceId: GetPlaySourceId("SilenceResponseToChoice"));
 
                     //Play audio for time out
-                    await callConnectionMedia.PlayToAllAsync(playSource, new PlayOptions { OperationContext = "SilenceResponseToChoice", Loop = false });
+                    var playOptions = new PlayToAllOptions(playSource)
+                    {
+                        OperationContext = "SilenceResponseToChoice",
+                        Loop = false
+                    };
+                    await callConnectionMedia.PlayToAllAsync(playOptions);
                 }
 
                 //Check for invalid speech option or invalid tone detection
                 //TODO: Add incorrect tone detected check 
-                if (recognizeFailedEvent.ReasonCode.Equals(ReasonCode.RecognizeSpeechOptionNotMatched))
+                if (recognizeFailedEvent.ReasonCode.Equals(MediaEventReasonCode.RecognizeSpeechOptionNotMatched))
                 {
                     logger.LogInformation($"Recognition failed for invalid speech detected, connection id: {@event.CallConnectionId}");
                     var playSource = "Invalid speech phrase detected, Disconnecting the call. Thank you!"
                     .ToTextPlaySource(playSourceId: GetPlaySourceId("ResponseToChoiceNotMatched"));
 
+                    var playOptions = new PlayToAllOptions(playSource)
+                    {
+                        OperationContext = "ResponseToChoiceNotMatched",
+                        Loop = false
+                    };
+
                     //Play text prompt for speech option not matched
-                    await callConnectionMedia.PlayToAllAsync(playSource, new PlayOptions { OperationContext = "ResponseToChoiceNotMatched", Loop = false });
+                    await callConnectionMedia.PlayToAllAsync(playOptions);
                 }
 
                 //await callConnection.HangUpAsync(forEveryone: true);
             }
-            if (@event is PlayCompletedEventData { OperationContext: "GreetingMessage" })
+            if (@event is PlayCompleted { OperationContext: "GreetingMessage" })
             {
                 await HandleAddressConfirmationAsync(callConnectionMedia, callerId);
             }
 
-            if (@event is PlayCompletedEventData { OperationContext: "NoOutageReportedMessage" })
+            if (@event is PlayCompleted { OperationContext: "NoOutageReportedMessage" })
             {
                 await HandleReportOutageMenuAsync(callConnectionMedia, callerId);
             }
 
             // hang up call when these prompts complete
-            if (@event is PlayCompletedEventData { OperationContext: "ReportRecordedMessage" } ||
-                @event is PlayCompletedEventData { OperationContext: "SilenceResponseToChoice" } ||
-                @event is PlayCompletedEventData { OperationContext: "ResponseToChoiceNotMatched" } ||
-                @event is PlayCompletedEventData { OperationContext: "UpdateAddressMessage" } ||
-                @event is PlayCompletedEventData { OperationContext: "AgentUnavailableMessage" })
+            if (@event is PlayCompleted { OperationContext: "ReportRecordedMessage" } ||
+                @event is PlayCompleted { OperationContext: "SilenceResponseToChoice" } ||
+                @event is PlayCompleted { OperationContext: "ResponseToChoiceNotMatched" } ||
+                @event is PlayCompleted { OperationContext: "UpdateAddressMessage" } ||
+                @event is PlayCompleted { OperationContext: "AgentUnavailableMessage" })
             {
                 logger.LogInformation($"PlayCompleted event received for call connection id: {@event.CallConnectionId}");
                 await callConnection.HangUpAsync(forEveryone: true);
             }
 
-            if (@event is PlayFailedEventData)
+            if (@event is PlayFailed)
             {
                 logger.LogInformation($"PlayFailed event received for call connection id: {@event.CallConnectionId}");
                 await callConnection.HangUpAsync(forEveryone: true);
@@ -128,25 +139,35 @@ namespace CogSvcIvrSamples
         {
             var connectingToAgentMessage = "Please wait while we connect you to a customer agent."
                 .ToTextPlaySource(playSourceId: GetPlaySourceId("ConnectingToAgentMessage"));
-            await callConnectionMedia.PlayToAllAsync(connectingToAgentMessage, new PlayOptions { OperationContext = "ConnectingToAgentMessage", Loop = false });
+            var playOptionsForConnectingToAgent = new PlayToAllOptions(connectingToAgentMessage)
+            {
+                OperationContext = "ConnectingToAgentMessage",
+                Loop = false
+            };
+            await callConnectionMedia.PlayToAllAsync(playOptionsForConnectingToAgent);
 
             var agentUnavailableMessage = "To help reduce your wait time, we have added you to our call back queue. One of our agents will call you back as soon as possible. Thank you for calling Contoso Electricity"
                 .ToTextPlaySource(playSourceId: GetPlaySourceId("AgentUnavailableMessage"));
-            await callConnectionMedia.PlayToAllAsync(agentUnavailableMessage, new PlayOptions { OperationContext = "AgentUnavailableMessage", Loop = false });
+            var playOptionsForAgentUnavailable = new PlayToAllOptions(agentUnavailableMessage)
+            {
+                OperationContext = "AgentUnavailableMessage",
+                Loop = false
+            };
+            await callConnectionMedia.PlayToAllAsync(playOptionsForAgentUnavailable);
         }
 
         async Task HandleWelcomMessageAsync(CallMedia callConnectionMedia, string callerId)
         {
             var greetingPlaySource = $"Hello {GetCustomerName(callerId)}, welcome to Contoso Electricity. I’m Sam, I can help provide you with information about planned and unplanned outages in your area."
                 .ToSsmlPlaySource();
-            await callConnectionMedia.PlayToAllAsync(greetingPlaySource, new PlayOptions { OperationContext = "GreetingMessage", Loop = false });
+            await callConnectionMedia.PlayToAllAsync(new PlayToAllOptions(greetingPlaySource) { OperationContext = "GreetingMessage", Loop = false });
         }
 
         async Task HandleOutageReportRecordedMessageAsync(CallMedia callConnectionMedia)
         {
             var reportOutageConfirmation = "Your power outage report have been recorded. A member of our technical staff will get in touch with you soon. This call will be disconnected."
                 .ToTextPlaySource(playSourceId: GetPlaySourceId("ReportRecordedMessage"));
-            await callConnectionMedia.PlayToAllAsync(reportOutageConfirmation, new PlayOptions { OperationContext = "ReportRecordedMessage", Loop = false });
+            await callConnectionMedia.PlayToAllAsync(new PlayToAllOptions(reportOutageConfirmation) { OperationContext = "ReportRecordedMessage", Loop = false });
         }
 
         async Task HandleAddressConfirmationAsync(CallMedia callConnectionMedia, string callerId)
@@ -154,7 +175,7 @@ namespace CogSvcIvrSamples
             var playAddressMessage = $"Based on our records against your phone number, your address is {GetCustomerAddress(callerId)}."
                 .ToTextPlaySource();
 
-            await callConnectionMedia.PlayToAllAsync(playAddressMessage, new PlayOptions { OperationContext = "PlayAddressMessage", Loop = false });
+            await callConnectionMedia.PlayToAllAsync( new PlayToAllOptions( playAddressMessage){ OperationContext = "PlayAddressMessage", Loop = false });
 
             // Confirm address
             var choices = new List<RecognizeChoice>
@@ -232,7 +253,7 @@ namespace CogSvcIvrSamples
         {
             var noOutageReportedMessage = "Thank you for confirming your address. We are not aware of any outages for your address.".ToTextPlaySource(playSourceId: GetPlaySourceId("NoOutageReportedMessage"));
 
-            await callConnectionMedia.PlayToAllAsync(noOutageReportedMessage, new PlayOptions { OperationContext = "NoOutageReportedMessage", Loop = false });
+            await callConnectionMedia.PlayToAllAsync(new PlayToAllOptions(noOutageReportedMessage) { OperationContext = "NoOutageReportedMessage", Loop = false });
         }
 
         async Task HandleReportOutageMenuAsync(CallMedia callConnectionMedia, string callerId)
@@ -270,7 +291,7 @@ namespace CogSvcIvrSamples
         {
             var updateAddressMessage = "I understand you would like to update your address, to do this please visit contoso.com/account. Thanks for calling contoso electricity. This call will be disconnected."
                 .ToTextPlaySource(playSourceId: GetPlaySourceId("UpdateAddressMessage"));
-            await callConnectionMedia.PlayToAllAsync(updateAddressMessage, new PlayOptions { OperationContext = "UpdateAddressMessage", Loop = false });
+            await callConnectionMedia.PlayToAllAsync(new PlayToAllOptions(updateAddressMessage) { OperationContext = "UpdateAddressMessage", Loop = false });
         }
 
         string GetCustomerName(string callerId)
