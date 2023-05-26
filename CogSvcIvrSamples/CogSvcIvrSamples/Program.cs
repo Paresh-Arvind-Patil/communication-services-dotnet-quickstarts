@@ -16,16 +16,24 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// use +19714154803 for dev testing
 //Fetch configuration and add call automation as singleton service
 var playSourceBaseId = "0c4d8d7d-4000-498b-b78d-9f5864da21bf";
 var callConfigurationSection = builder.Configuration.GetSection(nameof(CallConfiguration));
 builder.Services.Configure<CallConfiguration>(callConfigurationSection);
 var client = new CallAutomationClient(callConfigurationSection["ConnectionString"]);
+
+//Below is example for overrideing the PMA url
 //var client = new CallAutomationClient(new Uri("https://x-pma-uswe-04.plat.skype.com:6448"), callConfigurationSection["ConnectionString"]);
-var eventHandler = new ContosoBankWorkflowHandler(playSourceBaseId);
+
+//Below eventHandler showcases the Recogniztion Speech and SpeechOrDigit and Play SSML features
+//var eventHandler = new ContosoBankWorkflowHandler(playSourceBaseId);
+
+//Below eventHandler showcases the Recognize Choices and Play TTS features
+var eventHandler = new ContosoElectricityWorkflowHandler(playSourceBaseId);
 
 //var callbackUriBase = callConfigurationSection["AppBaseUri"];
+
+//Use below if setting up the tunnel using VS Dev tunnel 
 var callbackUriBase = Environment.GetEnvironmentVariable("VS_TUNNEL_URL");
 if (!String.IsNullOrEmpty(Environment.GetEnvironmentVariable("WEBSITE_SITE_NAME")))
 {
