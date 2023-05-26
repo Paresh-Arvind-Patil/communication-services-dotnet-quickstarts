@@ -25,13 +25,13 @@ namespace CogSvcIvrSamples
                 // play greeting message
                 var greetingPlaySource = "Welcome to Contoso Bank, I’m Dave. Please note that this call will be recorded for quality assurance."
                 .ToSsmlPlaySource(voiceName: playVoiceName, expression: playVoiceExpression);
-                var playOptions = new PlayToAllOptions(greetingPlaySource)
+                var playToAllOptions = new PlayToAllOptions(greetingPlaySource)
                 {
                     OperationContext = "GreetingMessage",
                     Loop = false
                 };
 
-                await callConnectionMedia.PlayToAllAsync(playOptions);
+                await callConnectionMedia.PlayToAllAsync(playToAllOptions);
             }
 
             if (@event is PlayCompleted { OperationContext: "GreetingMessage" })
